@@ -5,10 +5,23 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
 	"time"
 )
 
 const url = "https://boards.greenhouse.io/vimeo/jobs/42976#.VLaurYrF9TM"
+const filename = "work-at-vimeo.mp4"
+
+func downloadFromLocal(w http.ResponseWriter, r *http.Request) {
+	file, err := os.Open(filename)
+	if err != nil {
+		fmt.Println("File not found")
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	defer file.Close()
+	http.ServeContent(w, r, filename, time.Time{}, file)
+}
 
 func downloadHandler(w http.ResponseWriter, r *http.Request) {
 	timeout := time.Duration(5) * time.Second
@@ -35,7 +48,7 @@ func downloadHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	http.HandleFunc("/", downloadHandler)
+	http.HandleFunc("/", downloadFromLocal)
 	err := http.ListenAndServe(":8080", nil)
 	if err != nil {
 		fmt.Println(err)
