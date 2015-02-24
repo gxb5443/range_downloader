@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -57,8 +59,45 @@ func main() {
 		*/
 		wg.Wait()
 		log.Println("Download Complete!")
+		log.Println("Building File...")
+		outfile, err := os.Create("vimeo_final.mp4")
+		if err != nil {
+			log.Fatal(err)
+			return
+		}
+		for i := 0; i <= threads; i++ {
+			filename := "vimeo.part." + strconv.Itoa(i)
+			assembleChunk(filename, outfile)
+		}
 		return
 	}
+}
+
+func assembleChunk(filename string, outfile *os.File) {
+	chunkFile, err := os.Open(filename)
+	if err != nil {
+		log.Fatal(err)
+		return
+	}
+	defer chunkFile.Close()
+	creader := bufio.NewReader(chunkFile)
+	cwriter := bufio.NewWriter(outfile)
+	buffer := make([]byte, 2048)
+	for {
+		n, err := creader.Read(buffer)
+		if err != nil && err != io.EOF {
+			log.Fatal(err)
+			return
+		}
+		if n == 0 {
+			break
+		}
+		if _, err := cwriter.Write(buffer); err != nil {
+			log.Fatal(err)
+			return
+		}
+	}
+	os.Remove(filename)
 }
 
 func fetchChunk(start_byte, end_byte int64, url string, filename string, wg *sync.WaitGroup) {
