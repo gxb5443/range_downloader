@@ -2,6 +2,8 @@ package main
 
 import (
 	"bufio"
+	"crypto/md5"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"log"
@@ -9,19 +11,22 @@ import (
 	"os"
 	"strconv"
 	"sync"
+	"time"
 )
 
 const url = "http://storage.googleapis.com/vimeo-test/work-at-vimeo.mp4"
 const chunksize = 100000
-const threads = 1000
+const threads = 100
 
 func main() {
+	defer timeTrack(time.Now(), "Full download")
 	resp, err := http.Get(url)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 	content_size, _ := strconv.Atoi(resp.Header["Content-Length"][0])
+	log.Println(resp.Header["X-Goog-Hash"])
 	if resp.Header["Accept-Ranges"][0] == "bytes" {
 		var wg sync.WaitGroup
 		log.Println("Ranges Supported!")
@@ -74,6 +79,20 @@ func main() {
 			log.Fatal("Actual Size: ", actual_filesize, "\nExpected: ", content_size)
 			return
 		}
+		//Verify Md5
+		if len(resp.Header["X-Goog-Hash"]) > 1 {
+			content_md5, err := base64.StdEncoding.DecodeString(resp.Header["X-Goog-Hash"][1][4:])
+			if err != nil {
+				log.Fatal(err)
+				return
+			}
+			log.Printf("%x", content_md5)
+			hash := md5.New()
+			if _, err := io.Copy(hash, outfile); err != nil {
+				log.Fatal(err)
+			}
+			//log.Printf("%x", hash.Sum(nil))
+		}
 		log.Println("File Build Complete!")
 		return
 	}
@@ -81,17 +100,6 @@ func main() {
 	log.Println("Beginning full download...")
 	fetchChunk(0, int64(content_size), url, "no-range-vimeo.mp4", nil)
 	log.Println("Download Complete")
-	/*
-		filesize := outfile.Stat().Size()
-		blocks := uint64(math.Ceil(float64(filesize)/float64(8192)))
-		hash := md5.New()
-		for i:=uint64(0); i<blocks; i++ {
-			blocksize := int(math.Min(filechunk, float64(filesize-int64(i*filechunk))))
-			buf := make([] byte, blocksize)
-			file.Read(buf)
-			io.WriteString(hash, string(buf))   // append into the hash
-		}
-	*/
 }
 
 func assembleChunk(filename string, outfile *os.File) {
@@ -103,7 +111,8 @@ func assembleChunk(filename string, outfile *os.File) {
 	defer chunkFile.Close()
 	creader := bufio.NewReader(chunkFile)
 	cwriter := bufio.NewWriter(outfile)
-	buffer := make([]byte, 4096)
+	buffer := make([]byte, 32768)
+	//buffer := make([]byte, 65536)
 	for {
 		n, err := creader.Read(buffer)
 		if err != nil && err != io.EOF {
@@ -156,9 +165,12 @@ func fetchChunk(start_byte, end_byte int64, url string, filename string, wg *syn
 		return
 	}
 	defer outfile.Close()
-	//outfile.Write(body)
-	//io.Copy(outfile, body)
 	io.Copy(outfile, res.Body)
 	log.Println("Finished Downloading byte ", start_byte)
 	return
+}
+
+func timeTrack(start time.Time, name string) {
+	elapsed := time.Since(start)
+	log.Printf("%s took %s", name, elapsed)
 }
