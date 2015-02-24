@@ -2,10 +2,12 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/md5"
 	"encoding/base64"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -17,6 +19,7 @@ import (
 const url = "http://storage.googleapis.com/vimeo-test/work-at-vimeo.mp4"
 const chunksize = 100000
 const threads = 100
+const fileChunk = 8192
 
 func main() {
 	defer timeTrack(time.Now(), "Full download")
@@ -68,7 +71,7 @@ func main() {
 			filename := "vimeo.part." + strconv.Itoa(i)
 			assembleChunk(filename, outfile)
 		}
-		//Veify file
+		//Verify file size
 		filestats, err := outfile.Stat()
 		if err != nil {
 			log.Fatal(err)
@@ -86,12 +89,19 @@ func main() {
 				log.Fatal(err)
 				return
 			}
-			log.Printf("%x", content_md5)
-			hash := md5.New()
-			if _, err := io.Copy(hash, outfile); err != nil {
+			if err != nil {
 				log.Fatal(err)
+				return
 			}
-			//log.Printf("%x", hash.Sum(nil))
+			barray, _ := ioutil.ReadFile("vimeo_final.mp4")
+			computed_hash := md5.Sum(barray)
+			computed_slice := computed_hash[0:]
+			if bytes.Compare(computed_slice, content_md5) != 0 {
+
+				log.Fatal("WARNING: MD5 Sums don't match")
+				return
+			}
+			log.Println("File MD5 Matches!")
 		}
 		log.Println("File Build Complete!")
 		return
