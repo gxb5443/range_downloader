@@ -21,11 +21,11 @@ func main() {
 		fmt.Println(err)
 		return
 	}
+	content_size, _ := strconv.Atoi(resp.Header["Content-Length"][0])
 	if resp.Header["Accept-Ranges"][0] == "bytes" {
 		var wg sync.WaitGroup
 		log.Println("Ranges Supported!")
 		log.Println("Content Size:", resp.Header["Content-Length"][0])
-		content_size, _ := strconv.Atoi(resp.Header["Content-Length"][0])
 		calculated_chunksize := int(content_size / threads)
 		log.Println("Chunk Size: ", int(calculated_chunksize))
 		var end_byte int
@@ -50,14 +50,6 @@ func main() {
 			go fetchChunk(int64(start_byte), int64(end_byte), url, filename, &wg)
 			chunks++
 		}
-		/*
-			for i := 0; i < content_size; {
-				wg.Add(1)
-				end_byte := i + chunksize
-				go fetchChunk(int64(i), int64(end_byte), url, outFile, &wg)
-				i = end_byte
-			}
-		*/
 		wg.Wait()
 		log.Println("Download Complete!")
 		log.Println("Building File...")
@@ -82,20 +74,24 @@ func main() {
 			log.Fatal("Actual Size: ", actual_filesize, "\nExpected: ", content_size)
 			return
 		}
-		/*
-			filesize := outfile.Stat().Size()
-			blocks := uint64(math.Ceil(float64(filesize)/float64(8192)))
-			hash := md5.New()
-			for i:=uint64(0); i<blocks; i++ {
-				blocksize := int(math.Min(filechunk, float64(filesize-int64(i*filechunk))))
-				buf := make([] byte, blocksize)
-				file.Read(buf)
-				io.WriteString(hash, string(buf))   // append into the hash
-			}
-		*/
 		log.Println("File Build Complete!")
 		return
 	}
+	log.Println("Range Download unsupported")
+	log.Println("Beginning full download...")
+	fetchChunk(0, int64(content_size), url, "no-range-vimeo.mp4", nil)
+	log.Println("Download Complete")
+	/*
+		filesize := outfile.Stat().Size()
+		blocks := uint64(math.Ceil(float64(filesize)/float64(8192)))
+		hash := md5.New()
+		for i:=uint64(0); i<blocks; i++ {
+			blocksize := int(math.Min(filechunk, float64(filesize-int64(i*filechunk))))
+			buf := make([] byte, blocksize)
+			file.Read(buf)
+			io.WriteString(hash, string(buf))   // append into the hash
+		}
+	*/
 }
 
 func assembleChunk(filename string, outfile *os.File) {
@@ -133,7 +129,9 @@ func assembleChunk(filename string, outfile *os.File) {
 }
 
 func fetchChunk(start_byte, end_byte int64, url string, filename string, wg *sync.WaitGroup) {
-	defer wg.Done()
+	if wg != nil {
+		defer wg.Done()
+	}
 	client := new(http.Client)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
