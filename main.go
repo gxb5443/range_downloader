@@ -11,22 +11,31 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	nurl "net/url"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
-
-const fileChunk = 8192
 
 func main() {
 	url := flag.String("url", "http://storage.googleapis.com/vimeo-test/work-at-vimeo.mp4", "URL for download")
 	threads := flag.Int("threads", 100, "Number of threads to download with")
 	flag.Parse()
+	u, err := nurl.Parse(*url)
+	if err != nil {
+		log.Fatal(err)
+	}
+	final_filename := strings.Replace(u.Path[1:], "/", "-", -1)
 	defer timeTrack(time.Now(), "Full download")
 	resp, err := http.Get(*url)
 	if err != nil {
-		fmt.Println(err)
+		log.Fatal(err)
+		return
+	}
+	if len(resp.Header["Content-Length"]) < 1 {
+		log.Fatal("No Content-Length Provided")
 		return
 	}
 	content_size, _ := strconv.Atoi(resp.Header["Content-Length"][0])
@@ -40,11 +49,11 @@ func main() {
 		start_byte := 0
 		chunks := 0
 		for i := 0; i < *threads; i++ {
-			filename := "vimeo.part." + strconv.Itoa(i)
+			filename := final_filename + ".part." + strconv.Itoa(i)
 			wg.Add(1)
 			//start_byte := i * int(calculated_chunksize)
 			end_byte = start_byte + int(calculated_chunksize)
-			log.Println("Dispatch ", start_byte, " to ", end_byte)
+			log.Println("Dispatch bytes", start_byte, " to ", end_byte)
 			go fetchChunk(int64(start_byte), int64(end_byte), *url, filename, &wg)
 			start_byte = end_byte
 			chunks++
@@ -53,22 +62,22 @@ func main() {
 			wg.Add(1)
 			start_byte = end_byte
 			end_byte = content_size
-			filename := "vimeo.part." + strconv.Itoa(chunks)
-			log.Println("Dispatch ", start_byte, " to ", end_byte)
+			filename := final_filename + ".part." + strconv.Itoa(chunks)
+			log.Println("Dispatch bytes", start_byte, " to ", end_byte)
 			go fetchChunk(int64(start_byte), int64(end_byte), *url, filename, &wg)
 			chunks++
 		}
 		wg.Wait()
 		log.Println("Download Complete!")
 		log.Println("Building File...")
-		outfile, err := os.Create("vimeo_final.mp4")
+		outfile, err := os.Create(final_filename)
 		defer outfile.Close()
 		if err != nil {
 			log.Fatal(err)
 			return
 		}
 		for i := 0; i < chunks; i++ {
-			filename := "vimeo.part." + strconv.Itoa(i)
+			filename := final_filename + ".part." + strconv.Itoa(i)
 			assembleChunk(filename, outfile)
 		}
 		//Verify file size
@@ -93,7 +102,7 @@ func main() {
 				log.Fatal(err)
 				return
 			}
-			barray, _ := ioutil.ReadFile("vimeo_final.mp4")
+			barray, _ := ioutil.ReadFile(final_filename)
 			computed_hash := md5.Sum(barray)
 			computed_slice := computed_hash[0:]
 			if bytes.Compare(computed_slice, content_md5) != 0 {
@@ -108,7 +117,7 @@ func main() {
 	}
 	log.Println("Range Download unsupported")
 	log.Println("Beginning full download...")
-	fetchChunk(0, int64(content_size), *url, "no-range-vimeo.mp4", nil)
+	fetchChunk(0, int64(content_size), *url, "no-range-"+final_filename, nil)
 	log.Println("Download Complete")
 }
 
@@ -159,6 +168,22 @@ func fetchChunk(start_byte, end_byte int64, url string, filename string, wg *syn
 	}
 	req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", start_byte, end_byte-1))
 	res, err := client.Do(req)
+	/*
+		var retry int = 3
+		var res *http.Response
+		for i := retry; i > 0; i-- {
+			res, err = client.Do(req)
+			if res.StatusCode == 200 {
+				retry = 3
+				break
+			}
+			retry = i
+		}
+		if retry == 0 && res == nil {
+			log.Fatal(err)
+			return
+		}
+	*/
 	if err != nil {
 		log.Fatal(err)
 		return
