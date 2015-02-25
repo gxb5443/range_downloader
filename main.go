@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"crypto/md5"
 	"encoding/base64"
@@ -128,31 +127,33 @@ func assembleChunk(filename string, outfile *os.File) {
 		return
 	}
 	defer chunkFile.Close()
-	creader := bufio.NewReader(chunkFile)
-	cwriter := bufio.NewWriter(outfile)
-	buffer := make([]byte, 32768)
-	//buffer := make([]byte, 65536)
-	for {
-		n, err := creader.Read(buffer)
-		if err != nil && err != io.EOF {
+	//creader := bufio.NewReader(chunkFile)
+	//cwriter := bufio.NewWriter(outfile)
+	io.Copy(outfile, chunkFile)
+	/*
+		buffer := make([]byte, 32768)
+		for {
+			n, err := creader.Read(buffer)
+			if err != nil && err != io.EOF {
+				log.Fatal(err)
+				return
+			}
+			if err == io.EOF {
+				break
+			}
+			if n == 0 {
+				break
+			}
+			if _, err := cwriter.Write(buffer[:n]); err != nil {
+				log.Fatal(err)
+				return
+			}
+		}
+		if err := cwriter.Flush(); err != nil {
 			log.Fatal(err)
 			return
 		}
-		if err == io.EOF {
-			break
-		}
-		if n == 0 {
-			break
-		}
-		if _, err := cwriter.Write(buffer[:n]); err != nil {
-			log.Fatal(err)
-			return
-		}
-	}
-	if err := cwriter.Flush(); err != nil {
-		log.Fatal(err)
-		return
-	}
+	*/
 	os.Remove(filename)
 }
 
