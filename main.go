@@ -75,6 +75,7 @@ func main() {
 			log.Fatal(err)
 			return
 		}
+		defer timeTrack(time.Now(), "File Assembled")
 		for i := 0; i < chunks; i++ {
 			filename := final_filename + ".part." + strconv.Itoa(i)
 			assembleChunk(filename, outfile)
@@ -127,10 +128,10 @@ func assembleChunk(filename string, outfile *os.File) {
 		return
 	}
 	defer chunkFile.Close()
-	//creader := bufio.NewReader(chunkFile)
-	//cwriter := bufio.NewWriter(outfile)
 	io.Copy(outfile, chunkFile)
 	/*
+		creader := bufio.NewReader(chunkFile)
+		cwriter := bufio.NewWriter(outfile)
 		buffer := make([]byte, 32768)
 		for {
 			n, err := creader.Read(buffer)
