@@ -129,32 +129,6 @@ func assembleChunk(filename string, outfile *os.File) {
 	}
 	defer chunkFile.Close()
 	io.Copy(outfile, chunkFile)
-	/*
-		creader := bufio.NewReader(chunkFile)
-		cwriter := bufio.NewWriter(outfile)
-		buffer := make([]byte, 32768)
-		for {
-			n, err := creader.Read(buffer)
-			if err != nil && err != io.EOF {
-				log.Fatal(err)
-				return
-			}
-			if err == io.EOF {
-				break
-			}
-			if n == 0 {
-				break
-			}
-			if _, err := cwriter.Write(buffer[:n]); err != nil {
-				log.Fatal(err)
-				return
-			}
-		}
-		if err := cwriter.Flush(); err != nil {
-			log.Fatal(err)
-			return
-		}
-	*/
 	os.Remove(filename)
 }
 
@@ -191,7 +165,6 @@ func fetchChunk(start_byte, end_byte int64, url string, filename string, wg *syn
 		return
 	}
 	defer res.Body.Close()
-	//body, err := ioutil.ReadAll(res.Body)
 	if err != nil {
 		log.Fatal(err)
 		return
