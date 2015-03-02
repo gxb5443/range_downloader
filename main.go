@@ -37,6 +37,12 @@ func main() {
 		log.Fatal("No Content-Length Provided")
 		return
 	}
+	outfile, err := os.Create(final_filename)
+	if err != nil {
+		log.Fatal(err)
+		return
+	}
+	defer outfile.Close()
 	content_size, _ := strconv.Atoi(resp.Header["Content-Length"][0])
 	if resp.Header["Accept-Ranges"][0] == "bytes" {
 		var wg sync.WaitGroup
@@ -48,12 +54,10 @@ func main() {
 		start_byte := 0
 		chunks := 0
 		for i := 0; i < *threads; i++ {
-			filename := final_filename + ".part." + strconv.Itoa(i)
 			wg.Add(1)
-			//start_byte := i * int(calculated_chunksize)
 			end_byte = start_byte + int(calculated_chunksize)
 			log.Println("Dispatch bytes", start_byte, " to ", end_byte)
-			go fetchChunk(int64(start_byte), int64(end_byte), *url, filename, &wg)
+			go fetchChunk(int64(start_byte), int64(end_byte), *url, outfile, &wg)
 			start_byte = end_byte
 			chunks++
 		}
@@ -61,25 +65,14 @@ func main() {
 			wg.Add(1)
 			start_byte = end_byte
 			end_byte = content_size
-			filename := final_filename + ".part." + strconv.Itoa(chunks)
 			log.Println("Dispatch bytes", start_byte, " to ", end_byte)
-			go fetchChunk(int64(start_byte), int64(end_byte), *url, filename, &wg)
+			go fetchChunk(int64(start_byte), int64(end_byte), *url, outfile, &wg)
 			chunks++
 		}
 		wg.Wait()
 		log.Println("Download Complete!")
 		log.Println("Building File...")
-		outfile, err := os.Create(final_filename)
-		defer outfile.Close()
-		if err != nil {
-			log.Fatal(err)
-			return
-		}
 		defer timeTrack(time.Now(), "File Assembled")
-		for i := 0; i < chunks; i++ {
-			filename := final_filename + ".part." + strconv.Itoa(i)
-			assembleChunk(filename, outfile)
-		}
 		//Verify file size
 		filestats, err := outfile.Stat()
 		if err != nil {
@@ -117,7 +110,7 @@ func main() {
 	}
 	log.Println("Range Download unsupported")
 	log.Println("Beginning full download...")
-	fetchChunk(0, int64(content_size), *url, "no-range-"+final_filename, nil)
+	fetchChunk(0, int64(content_size), *url, outfile, nil)
 	log.Println("Download Complete")
 }
 
@@ -132,7 +125,7 @@ func assembleChunk(filename string, outfile *os.File) {
 	os.Remove(filename)
 }
 
-func fetchChunk(start_byte, end_byte int64, url string, filename string, wg *sync.WaitGroup) {
+func fetchChunk(start_byte, end_byte int64, url string, outfile *os.File, wg *sync.WaitGroup) {
 	if wg != nil {
 		defer wg.Done()
 	}
@@ -169,13 +162,12 @@ func fetchChunk(start_byte, end_byte int64, url string, filename string, wg *syn
 		log.Fatal(err)
 		return
 	}
-	outfile, err := os.Create(filename)
+	ra, err := ioutil.ReadAll(res.Body)
 	if err != nil {
 		log.Fatal(err)
 		return
 	}
-	defer outfile.Close()
-	io.Copy(outfile, res.Body)
+	outfile.WriteAt(ra, start_byte)
 	log.Println("Finished Downloading byte ", start_byte)
 	return
 }
